@@ -3,7 +3,6 @@ Abstract base class for multi agent gym environments with JAX
 Based on the Gymnax and PettingZoo APIs
 
 """
-
 import jax
 import jax.numpy as jnp
 from typing import Dict
@@ -13,7 +12,7 @@ from flax import struct
 from typing import Tuple, Optional
 
 from pygpudrive.env.config import EnvConfig
-from pygpudrive.env.env_jax import BaseEnvJax
+from pygpudrive.env.env_jax import GPUDriveJaxEnv as BaseEnvJax
 
 
 @struct.dataclass
@@ -29,17 +28,22 @@ class GPUDriveToJaxMARL(object):
 
     def __init__(
         self,
-        env: BaseEnvJax,
+        base_env: BaseEnvJax,
     ) -> None:
-        self.env = env
-        self.num_agents = env.config.max_agent_count
-        self.observation_spaces = env.observation_space
+        self._env = base_env
+        self.num_agents = base_env.config.max_agent_count
+        self.agents = [f"agent_{i}" for i in range(self.num_agents)]
+        self.observation_spaces = base_env.observation_space
         self.action_spaces = ...
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
-        raise NotImplementedError
+        obs_batch = self._env.reset()
+        obs = {agent: obs_batch[:, i] for i, agent in enumerate(self.agents)}
+        state = State(done=jnp.zeros(self.num_agents), step=0)
+        
+        return obs, state
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
@@ -76,6 +80,18 @@ class GPUDriveToJaxMARL(object):
         Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict
     ]:
         """Environment-specific step transition."""
+        
+        batched_actions = jnp.stack([actions[agent] for agent in self.agents], axis=1)
+        print(batched_actions.shape)
+        
+        self._env.step_dynamics(batched_actions)
+
+        obs = self._env.get_obs()
+        reward = self._env.get_rewards()
+        done = self._env.get_dones()
+        info = self._env.get_infos()
+
+        
         raise NotImplementedError
 
     def get_obs(self, state: State) -> Dict[str, chex.Array]:
