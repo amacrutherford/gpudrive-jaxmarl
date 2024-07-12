@@ -1,3 +1,10 @@
+# Dockerfile
+
+build with: `make -B build`
+run with: `make run`
+after running for first time, run `python build.py`
+
+
 GPUDrive: Data-driven, multi-agent driving simulation at 1 million FPS
 ============================
 
